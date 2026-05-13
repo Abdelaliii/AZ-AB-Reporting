@@ -1,0 +1,6 @@
+{
+  "name": "OrderFlow - Mandanten-Reportingsystem",
+  "description": "Zentrale Plattform zur Erfassung von Auftragsbestand und monatlichen Auftragszugängen für mehrere Gesellschaften.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
