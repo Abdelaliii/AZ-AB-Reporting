@@ -101,57 +101,21 @@ async function startServer() {
   const app = express();
   app.use(express.json());
 
-  // --- Password Reset Routes (Public) ---
-  app.get('/api/reset/question/:username', (req, res) => {
-    try {
-      const user = db.prepare('SELECT security_question FROM users WHERE username = ?').get(req.params.username) as any;
-      if (!user) return res.status(404).json({ error: 'Nutzer nicht gefunden' });
-      if (!user.security_question) return res.status(400).json({ error: 'Keine Sicherheitsfrage hinterlegt.' });
-      res.json({ question: user.security_question });
-    } catch (e) {
-      console.error('Reset Question Error:', e);
-      res.status(500).json({ error: 'Interner Fehler' });
-    }
-  });
 
-  app.post('/api/reset/password', (req, res) => {
-    try {
-      const { username, newPassword } = req.body;
-      const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
-      if (!user) return res.status(404).json({ error: 'Nutzer nicht gefunden' });
-      
-      const hashedNewPassword = bcrypt.hashSync(newPassword, 10);
-      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashedNewPassword, user.id);
-      res.json({ success: true });
-    } catch (e) {
-      console.error('Reset Password Error:', e);
-      res.status(500).json({ error: 'Interner Fehler' });
-    }
-  });
-
-  // --- Auth Middleware ---
+  // --- SSO Auth Middleware ---
   const authenticateToken = (req: any, res: any, next: any) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    // In production, the reverse proxy sets 'x-remote-user'
+    const remoteUser = req.headers['x-remote-user'] || process.env.DEV_MOCK_USER;
 
-    if (!token) return res.sendStatus(401);
+    if (!remoteUser) {
+      return res.status(401).json({ error: 'SSO Header missing' });
+    }
 
-    jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-      if (err) return res.sendStatus(403);
-      req.user = user;
-      next();
-    });
-  };
+    const username = (remoteUser as string).trim();
+    const user = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username) as any;
 
-  // --- API Routes ---
-
-  // LOGIN
-  app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
-
-    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-      return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
+    if (!user) {
+      return res.status(403).json({ error: 'Benutzer nicht für dieses Tool berechtigt' });
     }
 
     const companies = db.prepare(`
@@ -160,16 +124,20 @@ async function startServer() {
       WHERE uc.user_id = ?
     `).all(user.id);
 
-    const tokenPayload = { 
-      id: user.id, 
-      username: user.username, 
-      role: user.role, 
+    req.user = {
+      id: user.id,
+      username: user.username,
+      role: user.role,
       companies: companies
     };
+    next();
+  };
 
-    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '8h' });
+  // --- API Routes ---
 
-    res.json({ token, user: tokenPayload });
+  // GET ME (SSO Initialization for Frontend)
+  app.get('/api/me', authenticateToken, (req: any, res) => {
+    res.json({ user: req.user });
   });
 
   // GET MY COMPANY DATA
@@ -277,13 +245,12 @@ async function startServer() {
 
   app.post('/api/admin/users', authenticateToken, (req: any, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-    const { username, password, role, company_ids } = req.body;
+    const { username, role, company_ids } = req.body;
     
     try {
       db.transaction(() => {
-        const hashedPass = bcrypt.hashSync(password, 10);
-        const hashedAnswer = req.body.security_answer ? bcrypt.hashSync(req.body.security_answer.toLowerCase().trim(), 10) : null;
-        const result = db.prepare('INSERT INTO users (username, password_hash, role, security_question, security_answer_hash) VALUES (?, ?, ?, ?, ?)').run(username, hashedPass, role, req.body.security_question || null, hashedAnswer);
+        // Dummy hash because column is NOT NULL
+        const result = db.prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)').run(username, 'SSO', role);
         const newId = result.lastInsertRowid;
         
         if (company_ids && Array.isArray(company_ids)) {
@@ -304,30 +271,11 @@ async function startServer() {
   app.put('/api/admin/users/:id', authenticateToken, (req: any, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
     const { id } = req.params;
-    const { username, password, role, company_ids } = req.body;
+    const { username, role, company_ids } = req.body;
     
     try {
       db.transaction(() => {
-        const hashedAnswer = req.body.security_answer ? bcrypt.hashSync(req.body.security_answer.toLowerCase().trim(), 10) : null;
-        
-        if (password) {
-          const hashedPass = bcrypt.hashSync(password, 10);
-          if (hashedAnswer) {
-            db.prepare('UPDATE users SET username = ?, password_hash = ?, role = ?, security_question = ?, security_answer_hash = ? WHERE id = ?')
-              .run(username, hashedPass, role, req.body.security_question, hashedAnswer, id);
-          } else {
-            db.prepare('UPDATE users SET username = ?, password_hash = ?, role = ?, security_question = ? WHERE id = ?')
-              .run(username, hashedPass, role, req.body.security_question, id);
-          }
-        } else {
-          if (hashedAnswer) {
-            db.prepare('UPDATE users SET username = ?, role = ?, security_question = ?, security_answer_hash = ? WHERE id = ?')
-              .run(username, role, req.body.security_question, hashedAnswer, id);
-          } else {
-            db.prepare('UPDATE users SET username = ?, role = ?, security_question = ? WHERE id = ?')
-              .run(username, role, req.body.security_question, id);
-          }
-        }
+        db.prepare('UPDATE users SET username = ?, role = ? WHERE id = ?').run(username, role, id);
         
         // Rewrite companies
         db.prepare('DELETE FROM user_companies WHERE user_id = ?').run(id);

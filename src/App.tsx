@@ -20,10 +20,8 @@ function cn(...inputs: ClassValue[]) {
 
 const API = {
   async request(endpoint: string, options: RequestInit = {}) {
-    const token = localStorage.getItem('token');
     const headers = {
       'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       ...options.headers,
     };
     
@@ -34,135 +32,6 @@ const API = {
   }
 };
 
-// --- View Components ---
-
-function Login({ onLogin }: { onLogin: (user: any, token: string) => void }) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [resetStep, setResetStep] = useState<'login' | 'username' | 'question' | 'newpass'>('login');
-  const [resetUsername, setResetUsername] = useState('');
-  const [securityQuestion, setSecurityQuestion] = useState('');
-  const [resetAnswer, setResetAnswer] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [resetSuccess, setResetSuccess] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      const data = await API.request('/api/login', {
-        method: 'POST',
-        body: JSON.stringify({ username, password }),
-      });
-      onLogin(data.user, data.token);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleForgotFinal = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      await API.request('/api/reset/password', {
-        method: 'POST',
-        body: JSON.stringify({ username: resetUsername, newPassword }),
-      });
-      setResetSuccess(true);
-      setTimeout(() => {
-        setResetStep('login');
-        setResetSuccess(false);
-        setResetUsername('');
-        setNewPassword('');
-      }, 3000);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#fcfbfa] via-[#FFFFFF] to-[#fcfaf4] px-4">
-      <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-[#f4f2ec]/40 via-transparent to-transparent pointer-events-none"></div>
-      <div className="max-w-md w-full z-10 glass-panel p-10 rounded-[2rem] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border border-white/50 backdrop-blur-xl bg-white/70">
-        <div className="flex flex-col items-center">
-          <div className="flex flex-col items-center select-none mb-10 transform hover:scale-105 transition-transform duration-500">
-            <img src="/logo.png" alt="ARE Logo" className="h-48 w-auto object-contain" />
-          </div>
-          <h2 className="mt-8 text-center text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-gray-900 to-gray-600 tracking-tight">ARE Reporting Platform</h2>
-          <p className="mt-3 text-center text-sm text-gray-500 font-medium italic">
-            Auftragszugangsmanagement
-          </p>
-        </div>
-
-        {resetStep === 'login' ? (
-          <form className="mt-10 space-y-6" onSubmit={handleSubmit}>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5 ml-1 text-left">Benutzername</label>
-                <input type="text" required className="w-full px-4 py-3 bg-white/50 border border-gray-200/80 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C8B568] shadow-sm"
-                  value={username} onChange={(e) => setUsername(e.target.value)} />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5 ml-1 text-left">Passwort</label>
-                <input type="password" required className="w-full px-4 py-3 bg-white/50 border border-gray-200/80 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C8B568] shadow-sm"
-                  value={password} onChange={(e) => setPassword(e.target.value)} />
-                <div className="flex justify-end mt-1.5">
-                  <button type="button" onClick={() => setResetStep('username')} className="text-[11px] font-bold text-[#C8B568] hover:text-[#b9a557] uppercase tracking-wider">
-                    Passwort vergessen?
-                  </button>
-                </div>
-              </div>
-            </div>
-            {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-xl border border-red-100 flex gap-2 items-center"><AlertCircle size={16}/> {error}</div>}
-            <button type="submit" disabled={loading} className="w-full py-3.5 px-4 rounded-xl text-white font-bold bg-gradient-to-r from-[#C8B568] to-[#b9a557] shadow-lg">
-              {loading ? 'Laden...' : 'Secure Login'}
-            </button>
-          </form>
-        ) : (
-          <form className="mt-10 space-y-6" onSubmit={handleForgotFinal}>
-            {resetSuccess ? (
-              <div className="text-center py-6 animate-in zoom-in duration-300">
-                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle2 size={32} />
-                </div>
-                <h3 className="text-xl font-bold text-slate-800">Erfolgreich!</h3>
-                <p className="text-sm text-slate-500 mt-1">Passwort wurde geändert. Leite zum Login weiter...</p>
-              </div>
-            ) : (
-              <>
-                <div className="text-center mb-6">
-                  <h3 className="text-xl font-bold text-slate-800">Passwort zurücksetzen</h3>
-                  <p className="text-sm text-slate-500 mt-1">Geben Sie Ihren Nutzernamen und das neue Passwort ein.</p>
-                </div>
-                <div className="space-y-4">
-                  <input type="text" required placeholder="Nutzername" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#C8B568]"
-                    value={resetUsername} onChange={(e) => setResetUsername(e.target.value)} />
-                  <input type="password" required placeholder="Neues Passwort" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#C8B568]"
-                    value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-                </div>
-                {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-xl border border-red-100">{error}</div>}
-                <div className="flex flex-col gap-3">
-                  <button type="submit" disabled={loading} className="w-full py-3.5 px-4 rounded-xl text-white font-bold bg-slate-900">
-                    {loading ? 'Wird gespeichert...' : 'Passwort jetzt ändern'}
-                  </button>
-                  <button type="button" onClick={() => setResetStep('login')} className="text-sm text-slate-500 font-medium">Zurück zum Login</button>
-                </div>
-              </>
-            )}
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function NavItem({ to, icon: Icon, label }: { to: string, icon: any, label: string }) {
   const location = useLocation();
@@ -424,10 +293,8 @@ function AdminUserManagement() {
                  <button type="button" onClick={() => setEditingUser(null)} className="text-xs text-[#C8B568] hover:text-[#7a6d40]">Abbrechen</button>
                </h3>
                <div className="grid grid-cols-2 gap-4">
-                  <input type="text" required placeholder="Username" className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-[#C8B568] text-sm font-medium" 
+                  <input type="text" required placeholder="Username" className="col-span-2 bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-[#C8B568] text-sm font-medium" 
                     value={editingUser.username} onChange={e => setEditingUser({...editingUser, username: e.target.value})}/>
-                  <input type="password" placeholder="Passwort (leer = beibehalten)" className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-[#C8B568] text-sm font-medium" 
-                    value={editingUser.password || ''} onChange={e => setEditingUser({...editingUser, password: e.target.value})}/>
                   
                   <select className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-[#C8B568] text-sm font-medium"
                     value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value})}>
@@ -458,13 +325,11 @@ function AdminUserManagement() {
                </div>
             </form>
           ) : (
-            <form onSubmit={handleCreateUser} className="grid grid-cols-2 gap-4 mb-6">
-              <input type="text" required placeholder="Username" className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-[#C8B568] text-sm font-medium" 
-                value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})}/>
-              <input type="password" required placeholder="Passwort" className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-[#C8B568] text-sm font-medium" 
-                value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})}/>
-              
-              <select className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-[#C8B568] text-sm font-medium"
+              <form onSubmit={handleCreateUser} className="grid grid-cols-2 gap-4 mb-6">
+                <input type="text" required placeholder="Username" className="col-span-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-[#C8B568] text-sm font-medium" 
+                  value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})}/>
+                
+                <select className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-[#C8B568] text-sm font-medium"
                 value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}>
                 <option value="user">User</option>
                 <option value="admin">Admin</option>
@@ -946,45 +811,50 @@ function UserBacklog({ user }: { user: any }) {
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('token');
-    if (savedUser && token) setUser(JSON.parse(savedUser));
-    setReady(true);
+    API.request('/api/me')
+      .then(data => setUser(data.user))
+      .catch(err => setError(err.message))
+      .finally(() => setReady(true));
   }, []);
 
   if (!ready) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="animate-pulse flex gap-2"><div className="w-4 h-4 bg-[#C8B568] rounded-full"></div><div className="w-4 h-4 bg-blue-500 rounded-full"></div></div></div>;
 
+  if (error || !user) return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center border border-red-100">
+        <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+        <h1 className="text-2xl font-bold text-slate-800 mb-2">Zugriff verweigert</h1>
+        <p className="text-slate-600 font-medium">{error || 'Ihr Account ist nicht berechtigt.'}</p>
+        <p className="text-sm text-slate-400 mt-6">Bitte wenden Sie sich an die IT, falls dies ein Fehler ist.</p>
+      </div>
+    </div>
+  );
+
   return (
     <Router>
-      {!user ? (
+      <Layout user={user} onLogout={() => { window.location.href = '/'; }}>
         <Routes>
-          <Route path="/login" element={<Login onLogin={(u,t) => { setUser(u); localStorage.setItem('user', JSON.stringify(u)); localStorage.setItem('token', t); }} />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          {user.role === 'admin' ? (
+            <>
+              <Route path="/admin" element={<AdminOverview />} />
+              <Route path="/analytics" element={<AnalyticsDashboard user={user} />} />
+              <Route path="/users" element={<AdminUserManagement />} />
+              <Route path="/companies" element={<AdminCompanyManagement />} />
+              <Route path="*" element={<Navigate to="/admin" replace />} />
+            </>
+          ) : (
+            <>
+              <Route path="/reporting" element={<UserReporting user={user} />} />
+              <Route path="/backlog" element={<UserBacklog user={user} />} />
+              <Route path="/analytics" element={<AnalyticsDashboard user={user} />} />
+              <Route path="*" element={<Navigate to="/reporting" replace />} />
+            </>
+          )}
         </Routes>
-      ) : (
-        <Layout user={user} onLogout={() => { setUser(null); localStorage.removeItem('user'); localStorage.removeItem('token'); }}>
-          <Routes>
-            {user.role === 'admin' ? (
-              <>
-                <Route path="/admin" element={<AdminOverview />} />
-                <Route path="/analytics" element={<AnalyticsDashboard user={user} />} />
-                <Route path="/users" element={<AdminUserManagement />} />
-                <Route path="/companies" element={<AdminCompanyManagement />} />
-                <Route path="*" element={<Navigate to="/admin" replace />} />
-              </>
-            ) : (
-              <>
-                <Route path="/reporting" element={<UserReporting user={user} />} />
-                <Route path="/backlog" element={<UserBacklog user={user} />} />
-                <Route path="/analytics" element={<AnalyticsDashboard user={user} />} />
-                <Route path="*" element={<Navigate to="/reporting" replace />} />
-              </>
-            )}
-          </Routes>
-        </Layout>
-      )}
+      </Layout>
     </Router>
   );
 }
