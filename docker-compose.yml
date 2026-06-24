@@ -9,7 +9,7 @@ services:
     volumes:
       - are_data:/app/data
     environment:
-      - DB_PATH=/app/data/orders.db
+      
       - NODE_ENV=production
       - DEV_MOCK_USER=aelyoussfi
     restart: always
