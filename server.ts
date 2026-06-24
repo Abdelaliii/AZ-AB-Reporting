@@ -4,10 +4,12 @@ import path from 'path';
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import cookieParser from 'cookie-parser';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-this';
+const ADMIN_JWT_COOKIE = 'are_admin_token';
 const DB_PATH = process.env.DB_PATH || 'orders.db';
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -100,11 +102,33 @@ seed();
 async function startServer() {
   const app = express();
   app.use(express.json());
+  app.use(cookieParser());
 
 
   // --- SSO Auth Middleware ---
+  // Supports two authentication paths:
+  // 1. Normal users: SSO via X-Remote-User header (set by reverse proxy)
+  // 2. Admin: Password login via JWT cookie (/api/admin-login)
   const authenticateToken = (req: any, res: any, next: any) => {
-    // In production, the reverse proxy sets 'x-remote-user'
+    // Path 1: Check for admin JWT cookie (password login)
+    const adminToken = req.cookies?.[ADMIN_JWT_COOKIE];
+    if (adminToken) {
+      try {
+        const decoded = jwt.verify(adminToken, JWT_SECRET) as any;
+        if (decoded.role !== 'admin') {
+          return res.status(403).json({ error: 'Kein Admin-Token' });
+        }
+        const user = db.prepare('SELECT * FROM users WHERE id = ? AND role = ?').get(decoded.id, 'admin') as any;
+        if (!user) return res.status(403).json({ error: 'Admin-Konto nicht gefunden' });
+        req.user = { id: user.id, username: user.username, role: user.role, companies: [] };
+        return next();
+      } catch (e) {
+        // Token invalid or expired — fall through to SSO check
+        res.clearCookie(ADMIN_JWT_COOKIE);
+      }
+    }
+
+    // Path 2: SSO via reverse proxy header
     const remoteUser = req.headers['x-remote-user'] || process.env.DEV_MOCK_USER;
 
     if (!remoteUser) {
@@ -134,6 +158,39 @@ async function startServer() {
   };
 
   // --- API Routes ---
+
+  // ADMIN PASSWORD LOGIN (bypasses SSO, sets HttpOnly cookie)
+  app.post('/api/admin-login', (req: any, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Benutzername und Passwort erforderlich' });
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username) as any;
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ error: 'Ungültige Anmeldedaten oder kein Admin-Konto' });
+    }
+
+    const passwordValid = bcrypt.compareSync(password, user.password_hash);
+    if (!passwordValid) {
+      return res.status(403).json({ error: 'Falsches Passwort' });
+    }
+
+    const token = jwt.sign({ id: user.id, username: user.username, role: 'admin' }, JWT_SECRET, { expiresIn: '12h' });
+    res.cookie(ADMIN_JWT_COOKIE, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 12 * 60 * 60 * 1000 // 12 hours
+    });
+    res.json({ success: true, user: { id: user.id, username: user.username, role: 'admin', companies: [] } });
+  });
+
+  // ADMIN LOGOUT (clears cookie)
+  app.post('/api/admin-logout', (req: any, res) => {
+    res.clearCookie(ADMIN_JWT_COOKIE);
+    res.json({ success: true });
+  });
 
   // GET ME (SSO Initialization for Frontend)
   app.get('/api/me', authenticateToken, (req: any, res) => {

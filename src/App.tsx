@@ -8,7 +8,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } f
 import { 
   BarChart3, LayoutDashboard, FileText, LogOut, 
   ClipboardCheck, AlertCircle, CheckCircle2, Building2, 
-  Calendar, Send, Users, UserPlus, Settings, PieChart 
+  Calendar, Send, Users, UserPlus, Settings, PieChart,
+  Lock, Eye, EyeOff
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, AreaChart, Area } from 'recharts';
 import { clsx, type ClassValue } from 'clsx';
@@ -25,7 +26,7 @@ const API = {
       ...options.headers,
     };
     
-    const response = await fetch(endpoint, { ...options, headers });
+    const response = await fetch(endpoint, { ...options, headers, credentials: 'same-origin' });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Serverfehler');
     return data;
@@ -806,28 +807,170 @@ function UserBacklog({ user }: { user: any }) {
   );
 }
 
+// --- Admin Login Page ---
+
+function AdminLoginPage({ onLogin }: { onLogin: (user: any) => void }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const data = await API.request('/api/admin-login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password })
+      });
+      onLogin(data.user);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4" style={{ background: 'radial-gradient(ellipse at 60% 20%, #1e293b 0%, #0f172a 70%)' }}>
+      <div className="w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-10">
+          <div className="text-white text-6xl font-black italic tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-[#f3d38c] via-[#C8B568] to-[#947e3a]" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+            ARE
+          </div>
+          <div className="text-white/50 text-xs tracking-[0.4em] font-bold mt-1 uppercase">Beteiligungen · Admin</div>
+        </div>
+
+        {/* Card */}
+        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="w-10 h-10 rounded-xl bg-[#C8B568]/20 flex items-center justify-center">
+              <Lock size={20} className="text-[#C8B568]" />
+            </div>
+            <div>
+              <h1 className="text-white font-bold text-lg">Admin-Anmeldung</h1>
+              <p className="text-slate-400 text-sm">Zugang nur für Administratoren</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Benutzername</label>
+              <input
+                id="admin-username"
+                type="text"
+                required
+                autoComplete="username"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-slate-600 focus:outline-none focus:border-[#C8B568]/60 focus:bg-white/8 transition-all"
+                placeholder="admin"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Passwort</label>
+              <div className="relative">
+                <input
+                  id="admin-password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 pr-12 text-white placeholder:text-slate-600 focus:outline-none focus:border-[#C8B568]/60 focus:bg-white/8 transition-all"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2.5 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+                <AlertCircle size={16} className="text-red-400 shrink-0" />
+                <span className="text-red-300 text-sm font-medium">{error}</span>
+              </div>
+            )}
+
+            <button
+              id="admin-login-submit"
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-[#C8B568] to-[#b9a557] text-white font-bold py-3.5 rounded-xl hover:from-[#d4c07a] hover:to-[#C8B568] transition-all shadow-lg shadow-[#C8B568]/20 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
+            >
+              {loading ? 'Anmelden...' : 'Anmelden'}
+            </button>
+          </form>
+
+          <p className="text-center text-slate-600 text-xs mt-6">
+            Mitarbeiter melden sich automatisch über Windows-Authentifizierung an.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Root App ---
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [ready, setReady] = useState(false);
-  const [error, setError] = useState('');
+  const [ssoFailed, setSsoFailed] = useState(false);
 
   useEffect(() => {
     API.request('/api/me')
       .then(data => setUser(data.user))
-      .catch(err => setError(err.message))
+      .catch(err => {
+        // If SSO header is missing, show admin login page instead of generic error
+        if (err.message && err.message.toLowerCase().includes('sso header missing')) {
+          setSsoFailed(true);
+        } else {
+          setSsoFailed(true); // Show login page for any auth failure
+        }
+      })
       .finally(() => setReady(true));
   }, []);
 
+  const handleAdminLogin = (loggedInUser: any) => {
+    setUser(loggedInUser);
+    setSsoFailed(false);
+  };
+
+  const handleLogout = async () => {
+    if (user?.role === 'admin') {
+      // Admin: clear the JWT cookie
+      try { await API.request('/api/admin-logout', { method: 'POST' }); } catch(e) {}
+    }
+    setUser(null);
+    setSsoFailed(false);
+    // Re-check SSO
+    API.request('/api/me')
+      .then(data => setUser(data.user))
+      .catch(() => setSsoFailed(true))
+      .finally(() => setReady(true));
+  };
+
   if (!ready) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="animate-pulse flex gap-2"><div className="w-4 h-4 bg-[#C8B568] rounded-full"></div><div className="w-4 h-4 bg-blue-500 rounded-full"></div></div></div>;
 
-  if (error || !user) return (
+  // Show admin login when SSO is not available
+  if (ssoFailed && !user) return <AdminLoginPage onLogin={handleAdminLogin} />;
+
+  if (!user) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center border border-red-100">
         <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
         <h1 className="text-2xl font-bold text-slate-800 mb-2">Zugriff verweigert</h1>
-        <p className="text-slate-600 font-medium">{error || 'Ihr Account ist nicht berechtigt.'}</p>
+        <p className="text-slate-600 font-medium">Ihr Account ist nicht berechtigt.</p>
         <p className="text-sm text-slate-400 mt-6">Bitte wenden Sie sich an die IT, falls dies ein Fehler ist.</p>
       </div>
     </div>
@@ -835,7 +978,7 @@ export default function App() {
 
   return (
     <Router>
-      <Layout user={user} onLogout={() => { window.location.href = '/'; }}>
+      <Layout user={user} onLogout={handleLogout}>
         <Routes>
           {user.role === 'admin' ? (
             <>
