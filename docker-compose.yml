@@ -7,8 +7,11 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./data:/app/data
+      - are_data:/app/data
     environment:
       - JWT_SECRET=ihr_super_geheimnisvoller_schluessel
       - DB_PATH=/app/data/orders.db
     restart: always
+
+volumes:
+  are_data:
