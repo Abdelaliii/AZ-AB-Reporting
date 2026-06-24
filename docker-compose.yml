@@ -1,19 +1,61 @@
 version: '3.8'
 
 services:
+
+  # -------------------------------------------------------------------
+  # Auth Proxy  (einziger nach außen erreichbarer Dienst)
+  # Nimmt alle Anfragen entgegen, prüft Windows-Anmeldedaten via LDAP
+  # und reicht den verifizierten Benutzernamen als X-Remote-User-Header
+  # an den App-Container weiter.
+  # -------------------------------------------------------------------
+  are-auth-proxy:
+    build: ./auth-proxy
+    container_name: are-auth-proxy
+    ports:
+      - "80:80"          # Hier greift der Browser drauf zu
+    environment:
+      - PORT=80
+      - APP_URL=http://are-reporting:3000
+
+      # ---------------------------------------------------------------
+      # LDAP / Active Directory – bitte anpassen!
+      # ---------------------------------------------------------------
+      - LDAP_URL=ldap://your-dc.company.local        # Adresse des Domain Controllers
+      - LDAP_BASE_DN=DC=company,DC=local             # z.B. DC=are,DC=local
+      - LDAP_DOMAIN=COMPANY                          # NETBIOS-Domänenname (z.B. ARE)
+      # ---------------------------------------------------------------
+
+      - JWT_SECRET=bitte_aendern_proxy_secret_123
+      - SESSION_MAX_AGE=28800   # Session-Dauer in Sekunden (8 Stunden)
+    depends_on:
+      - are-reporting
+    restart: always
+    networks:
+      - are-internal
+
+  # -------------------------------------------------------------------
+  # ARE Reporting App  (nicht mehr direkt von außen erreichbar)
+  # -------------------------------------------------------------------
   are-reporting:
     build: .
     container_name: are-reporting-app
-    ports:
-      - "3000:3000"
+    # Kein "ports:" mehr – App ist nur intern über den Proxy erreichbar
+    expose:
+      - "3000"
     volumes:
       - are_data:/app/data
     environment:
       - NODE_ENV=production
       - JWT_SECRET=ihr_super_geheimnisvoller_schluessel
       - DB_PATH=/app/data/orders.db
-      - DEV_MOCK_USER=aelyoussfi
+      # DEV_MOCK_USER wurde entfernt – Authentifizierung läuft jetzt über den Proxy
     restart: always
+    networks:
+      - are-internal
 
 volumes:
   are_data:
+
+networks:
+  are-internal:
+    driver: bridge
