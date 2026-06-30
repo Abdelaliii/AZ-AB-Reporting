@@ -926,6 +926,7 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [ready, setReady] = useState(false);
   const [ssoFailed, setSsoFailed] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     API.request('/api/me')
@@ -935,7 +936,7 @@ export default function App() {
         if (err.message && err.message.toLowerCase().includes('sso header missing')) {
           setSsoFailed(true);
         } else {
-          setSsoFailed(true); // Show login page for any auth failure
+          setError(err.message || 'Ihr Account ist nicht berechtigt.');
         }
       })
       .finally(() => setReady(true));
@@ -944,6 +945,7 @@ export default function App() {
   const handleAdminLogin = (loggedInUser: any) => {
     setUser(loggedInUser);
     setSsoFailed(false);
+    setError('');
   };
 
   const handleLogout = async () => {
@@ -953,28 +955,36 @@ export default function App() {
     }
     setUser(null);
     setSsoFailed(false);
+    setError('');
     // Re-check SSO
     API.request('/api/me')
       .then(data => setUser(data.user))
-      .catch(() => setSsoFailed(true))
+      .catch(err => {
+        if (err.message && err.message.toLowerCase().includes('sso header missing')) {
+          setSsoFailed(true);
+        } else {
+          setError(err.message || 'Ihr Account ist nicht berechtigt.');
+        }
+      })
       .finally(() => setReady(true));
   };
 
   if (!ready) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="animate-pulse flex gap-2"><div className="w-4 h-4 bg-[#C8B568] rounded-full"></div><div className="w-4 h-4 bg-blue-500 rounded-full"></div></div></div>;
 
-  // Show admin login when SSO is not available
-  if (ssoFailed && !user) return <AdminLoginPage onLogin={handleAdminLogin} />;
-
-  if (!user) return (
+  // Show specific error screen (e.g. user not in database)
+  if (error && !user) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center border border-red-100">
         <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
         <h1 className="text-2xl font-bold text-slate-800 mb-2">Zugriff verweigert</h1>
-        <p className="text-slate-600 font-medium">Ihr Account ist nicht berechtigt.</p>
+        <p className="text-slate-600 font-medium">{error}</p>
         <p className="text-sm text-slate-400 mt-6">Bitte wenden Sie sich an die IT, falls dies ein Fehler ist.</p>
       </div>
     </div>
   );
+
+  // Show admin login when SSO is not available (e.g. visiting direct port)
+  if (ssoFailed && !user) return <AdminLoginPage onLogin={handleAdminLogin} />;
 
   return (
     <Router>
