@@ -17,8 +17,8 @@ services:
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:latest
     container_name: are-reporting-oauth2-proxy
-    ports:
-      - "80:4180"
+    expose:
+      - "4180"
     environment:
       - OAUTH2_PROXY_PROVIDER=azure
       - OAUTH2_PROXY_CLIENT_ID=d1502a42-ba8d-4546-84cc-a2eb4a2e9cfd
@@ -27,12 +27,26 @@ services:
       - OAUTH2_PROXY_OIDC_ISSUER_URL=https://login.microsoftonline.com/a65e00c7-7272-47aa-b3cf-26e459361ecf/v2.0
       - OAUTH2_PROXY_UPSTREAMS=http://are-reporting:3000/
       - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
-      - OAUTH2_PROXY_REDIRECT_URL=http://10.101.53.7/oauth2/callback
+      - OAUTH2_PROXY_REDIRECT_URL=https://10.101.53.7/oauth2/callback
       - OAUTH2_PROXY_COOKIE_SECRET=YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY=
       - OAUTH2_PROXY_EMAIL_DOMAINS=*
-      - OAUTH2_PROXY_COOKIE_SECURE=false
+      - OAUTH2_PROXY_COOKIE_SECURE=true
       - OAUTH2_PROXY_PASS_USER_HEADERS=true
+      - OAUTH2_PROXY_REVERSE_PROXY=true
     restart: always
+
+  nginx:
+    build: ./nginx
+    container_name: are-reporting-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certs_data:/etc/nginx/certs
+    restart: always
+    depends_on:
+      - oauth2-proxy
 
 volumes:
   are_data:
+  certs_data:
