@@ -1,61 +1,37 @@
 version: '3.8'
 
 services:
-
-  # -------------------------------------------------------------------
-  # Auth Proxy  (einziger nach außen erreichbarer Dienst)
-  # Nimmt alle Anfragen entgegen, prüft Windows-Anmeldedaten via LDAP
-  # und reicht den verifizierten Benutzernamen als X-Remote-User-Header
-  # an den App-Container weiter.
-  # -------------------------------------------------------------------
-  are-auth-proxy:
-    build: ./auth-proxy
-    container_name: are-auth-proxy
-    ports:
-      - "80:80"          # Hier greift der Browser drauf zu
-    environment:
-      - PORT=80
-      - APP_URL=http://are-reporting:3000
-
-      # ---------------------------------------------------------------
-      # LDAP / Active Directory – bitte anpassen!
-      # ---------------------------------------------------------------
-      - LDAP_URL=ldap://your-dc.company.local        # Adresse des Domain Controllers
-      - LDAP_BASE_DN=DC=company,DC=local             # z.B. DC=are,DC=local
-      - LDAP_DOMAIN=COMPANY                          # NETBIOS-Domänenname (z.B. ARE)
-      # ---------------------------------------------------------------
-
-      - JWT_SECRET=bitte_aendern_proxy_secret_123
-      - SESSION_MAX_AGE=28800   # Session-Dauer in Sekunden (8 Stunden)
-    depends_on:
-      - are-reporting
-    restart: always
-    networks:
-      - are-internal
-
-  # -------------------------------------------------------------------
-  # ARE Reporting App  (nicht mehr direkt von außen erreichbar)
-  # -------------------------------------------------------------------
   are-reporting:
     build: .
     container_name: are-reporting-app
-    # Kein "ports:" mehr – App ist nur intern über den Proxy erreichbar
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
     volumes:
       - are_data:/app/data
     environment:
       - NODE_ENV=production
       - JWT_SECRET=ihr_super_geheimnisvoller_schluessel
       - DB_PATH=/app/data/orders.db
-      # DEV_MOCK_USER wurde entfernt – Authentifizierung läuft jetzt über den Proxy
     restart: always
-    networks:
-      - are-internal
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    container_name: are-reporting-oauth2-proxy
+    ports:
+      - "80:4180"
+    environment:
+      - OAUTH2_PROXY_PROVIDER=azure
+      - OAUTH2_PROXY_CLIENT_ID=d1502a42-ba8d-4546-84cc-a2eb4a2e9cfd
+      - OAUTH2_PROXY_CLIENT_SECRET=5ec3234e-cea9-4603-8844-cffbc7aac367
+      - OAUTH2_PROXY_AZURE_TENANT=a65e00c7-7272-47aa-b3cf-26e459361ecf
+      - OAUTH2_PROXY_UPSTREAMS=http://are-reporting:3000/
+      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
+      - OAUTH2_PROXY_REDIRECT_URL=http://10.101.53.7/oauth2/callback
+      - OAUTH2_PROXY_COOKIE_SECRET=YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY=
+      - OAUTH2_PROXY_EMAIL_DOMAINS=*
+      - OAUTH2_PROXY_COOKIE_SECURE=false
+      - OAUTH2_PROXY_PASS_USER_HEADERS=true
+    restart: always
 
 volumes:
   are_data:
-
-networks:
-  are-internal:
-    driver: bridge

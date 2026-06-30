@@ -128,18 +128,22 @@ async function startServer() {
       }
     }
 
-    // Path 2: SSO via reverse proxy header
-    const remoteUser = req.headers['x-remote-user'] || process.env.DEV_MOCK_USER;
+    // Path 2: SSO via reverse proxy header or oauth2-proxy
+    const remoteUser = req.headers['x-remote-user'] || req.headers['x-forwarded-user'] || req.headers['x-forwarded-email'] || process.env.DEV_MOCK_USER;
 
     if (!remoteUser) {
       return res.status(401).json({ error: 'SSO Header missing' });
     }
 
-    const username = (remoteUser as string).trim();
+    let username = (remoteUser as string).trim();
+    if (username.includes('@')) {
+      username = username.split('@')[0];
+    }
+
     const user = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username) as any;
 
     if (!user) {
-      return res.status(403).json({ error: 'Benutzer nicht für dieses Tool berechtigt' });
+      return res.status(403).json({ error: `Benutzer nicht für dieses Tool berechtigt: ${username}` });
     }
 
     const companies = db.prepare(`
