@@ -183,7 +183,7 @@ async function startServer() {
     const token = jwt.sign({ id: user.id, username: user.username, role: 'admin' }, JWT_SECRET, { expiresIn: '12h' });
     res.cookie(ADMIN_JWT_COOKIE, token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Set to false so it works over HTTP (e.g. http://10.101.53.7:3000)
       sameSite: 'strict',
       maxAge: 12 * 60 * 60 * 1000 // 12 hours
     });
