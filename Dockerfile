@@ -8,6 +8,8 @@ COPY package*.json ./
 RUN npm install
 
 # Copy source code and build the frontend
+# CACHEBUST forces Docker to re-run npm run build on every deploy
+ARG CACHEBUST=1
 COPY . .
 RUN npm run build
 

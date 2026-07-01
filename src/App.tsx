@@ -9,7 +9,7 @@ import {
   BarChart3, LayoutDashboard, FileText, LogOut, 
   ClipboardCheck, AlertCircle, CheckCircle2, Building2, 
   Calendar, Send, Users, UserPlus, Settings, PieChart,
-  Lock, Eye, EyeOff
+  Lock, Eye, EyeOff, Trash2, RefreshCw
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, AreaChart, Area } from 'recharts';
 import { clsx, type ClassValue } from 'clsx';
@@ -59,14 +59,12 @@ function Layout({ user, onLogout, children }: { user: any, onLogout: () => void,
   return (
     <div className="min-h-screen bg-slate-50 flex">
       <div className="w-72 bg-[#0f172a] text-white flex flex-col fixed h-full shadow-2xl z-20 border-r border-slate-800">
-        <div className="p-10 flex items-center justify-start border-b border-slate-800/30">
-          <div className="flex flex-col select-none">
-            <div className="text-white text-5xl font-black italic tracking-tighter leading-none bg-clip-text text-transparent bg-gradient-to-br from-[#f3d38c] via-[#C8B568] to-[#947e3a]" 
-                 style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
-              ARE
-            </div>
-            <div className="text-white/90 text-[10px] tracking-[0.4em] font-bold mt-1.5 uppercase">Beteiligungen</div>
-          </div>
+        <div className="px-8 py-5 flex items-center justify-start border-b border-slate-800/30">
+          <img 
+            src="/logo.png" 
+            alt="ARE Beteiligungen" 
+            className="h-16 w-auto object-contain select-none"
+          />
         </div>
         
         <nav className="flex-1 px-5 py-6 space-y-2.5 overflow-y-auto">
@@ -78,6 +76,7 @@ function Layout({ user, onLogout, children }: { user: any, onLogout: () => void,
               <NavItem to="/analytics" icon={PieChart} label="Datenabfrage" />
               <NavItem to="/users" icon={Users} label="Nutzerverwaltung" />
               <NavItem to="/companies" icon={Building2} label="Gesellschaftenverwaltung" />
+              <NavItem to="/data-management" icon={Trash2} label="Datenverwaltung" />
             </>
           ) : (
             <>
@@ -114,6 +113,298 @@ function Layout({ user, onLogout, children }: { user: any, onLogout: () => void,
       <div className="flex-1 ml-72">
         <div className="p-10 max-w-7xl mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
           {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Admin Data Management ---
+
+function AdminDataManagement() {
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedCompany, setSelectedCompany] = useState<string>('');
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [overview, setOverview] = useState<any>(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{ open: boolean; label: string; onConfirm: () => void } | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  const MONTHS_SHORT = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+  const YEARS = [2023, 2024, 2025, 2026];
+
+  useEffect(() => {
+    API.request('/api/admin/companies')
+      .then(d => {
+        setCompanies(d.companies);
+        if (d.companies.length > 0) setSelectedCompany(String(d.companies[0].id));
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCompany) return;
+    setOverviewLoading(true);
+    API.request(`/api/query?year=${selectedYear}&company_id=${selectedCompany}`)
+      .then(d => setOverview(d))
+      .catch(() => setOverview(null))
+      .finally(() => setOverviewLoading(false));
+  }, [selectedCompany, selectedYear]);
+
+  const showMessage = (type: 'success' | 'error', text: string) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 4000);
+  };
+
+  const handleDelete = (label: string, onConfirm: () => void) => {
+    setConfirmModal({ open: true, label, onConfirm });
+  };
+
+  const doDeleteMonthly = async (month?: number) => {
+    try {
+      const body: any = { company_id: parseInt(selectedCompany), year: selectedYear };
+      if (month) body.month = month;
+      const res = await API.request('/api/admin/data/monthly', { method: 'DELETE', body: JSON.stringify(body) });
+      showMessage('success', `${res.deleted} Eintrag/Einträge erfolgreich gelöscht.`);
+      API.request(`/api/query?year=${selectedYear}&company_id=${selectedCompany}`).then(d => setOverview(d));
+    } catch (e: any) {
+      showMessage('error', e.message);
+    }
+  };
+
+  const doDeleteInitial = async () => {
+    try {
+      const res = await API.request('/api/admin/data/initial', { method: 'DELETE', body: JSON.stringify({ company_id: parseInt(selectedCompany), year: selectedYear }) });
+      showMessage('success', `Auftragsbestand ${res.deleted > 0 ? 'erfolgreich gelöscht.' : 'war bereits leer.'}`);
+      API.request(`/api/query?year=${selectedYear}&company_id=${selectedCompany}`).then(d => setOverview(d));
+    } catch (e: any) {
+      showMessage('error', e.message);
+    }
+  };
+
+  if (loading) return <div className="h-64 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C8B568]"></div></div>;
+
+  const selectedCompanyName = companies.find(c => String(c.id) === selectedCompany)?.name || '';
+  const monthlyData = overview?.monthly || [];
+  const initialData = overview?.initial || [];
+  const hasInitial = initialData.length > 0;
+
+  return (
+    <div className="space-y-8">
+      {/* Confirm Modal */}
+      {confirmModal?.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-[2rem] shadow-2xl p-8 max-w-sm w-full mx-4 border border-red-100">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="text-red-500" size={22} />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-lg">Löschen bestätigen</h3>
+                <p className="text-slate-500 text-sm">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+              </div>
+            </div>
+            <p className="text-slate-700 font-medium bg-red-50 rounded-xl px-4 py-3 text-sm mb-6">{confirmModal.label}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 font-medium hover:bg-slate-50 transition-colors"
+              >Abbrechen</button>
+              <button
+                onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }}
+                className="flex-1 px-4 py-3 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+              >Endgültig löschen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">Datenverwaltung</h1>
+          <p className="mt-2 text-slate-500 font-medium">Löschen oder Zurücksetzen von Meldedaten pro Gesellschaft und Monat.</p>
+        </div>
+      </header>
+
+      {/* Toast Message */}
+      {message && (
+        <div className={cn(
+          "flex items-center gap-3 px-6 py-4 rounded-2xl font-medium shadow-lg border transition-all",
+          message.type === 'success' ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"
+        )}>
+          {message.type === 'success' ? <CheckCircle2 size={20} className="text-green-600" /> : <AlertCircle size={20} className="text-red-600" />}
+          {message.text}
+        </div>
+      )}
+
+      {/* Filter Panel */}
+      <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-sm border border-slate-100 p-8">
+        <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+          <Settings size={20} className="text-[#C8B568]" /> Filter
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Gesellschaft</label>
+            <select
+              value={selectedCompany}
+              onChange={e => setSelectedCompany(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-[#C8B568] cursor-pointer"
+            >
+              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Geschäftsjahr</label>
+            <select
+              value={selectedYear}
+              onChange={e => setSelectedYear(parseInt(e.target.value))}
+              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-[#C8B568] cursor-pointer"
+            >
+              {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Monat (optional)</label>
+            <select
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-[#C8B568] cursor-pointer"
+            >
+              <option value="">Alle Monate</option>
+              {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Data Status Overview */}
+      <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-sm border border-slate-100 p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <BarChart3 size={20} className="text-[#C8B568]" />
+            Datenstatus – {selectedCompanyName} / {selectedYear}
+          </h2>
+          {overviewLoading && <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#C8B568]"></div>}
+        </div>
+
+        {/* Monthly grid */}
+        <div className="mb-6">
+          <div className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Monatsberichte</div>
+          <div className="grid grid-cols-6 md:grid-cols-12 gap-2">
+            {MONTHS_SHORT.map((name, i) => {
+              const monthNum = i + 1;
+              const entry = monthlyData.find((m: any) => m.month === monthNum);
+              return (
+                <div key={monthNum} className="flex flex-col items-center gap-1">
+                  <div className={cn(
+                    "w-full aspect-square rounded-xl flex items-center justify-center text-xs font-bold transition-all",
+                    entry ? "bg-green-100 text-green-700 border border-green-200" : "bg-slate-100 text-slate-400"
+                  )}>
+                    {entry ? <CheckCircle2 size={16} /> : name}
+                  </div>
+                  {entry && (
+                    <span className="text-[10px] text-slate-500 font-medium text-center leading-tight">
+                      {new Intl.NumberFormat('de-DE').format(entry.amount)} €
+                    </span>
+                  )}
+                  {!entry && <span className="text-[10px] text-slate-400">{name}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Initial backlog status */}
+        <div className="flex items-center gap-4 bg-slate-50 rounded-2xl px-5 py-4">
+          <div className={cn(
+            "w-4 h-4 rounded-full flex-shrink-0",
+            hasInitial ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" : "bg-slate-300"
+          )} />
+          <div>
+            <div className="text-sm font-bold text-slate-700">Auftragsbestand {selectedYear}</div>
+            <div className="text-xs text-slate-500">
+              {hasInitial
+                ? `Wert: ${new Intl.NumberFormat('de-DE').format(initialData[0]?.amount)} €`
+                : 'Noch kein Auftragsbestand erfasst'
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Delete Actions */}
+      <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-sm border border-red-100 p-8">
+        <h2 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
+          <Trash2 size={20} className="text-red-500" /> Daten löschen
+        </h2>
+        <p className="text-sm text-slate-500 mb-6">
+          Wählen Sie oben Gesellschaft, Jahr und optional einen Monat aus, dann klicken Sie auf Löschen.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Delete monthly */}
+          <div className="bg-red-50 rounded-2xl p-6 border border-red-100">
+            <div className="flex items-start gap-3 mb-4">
+              <Calendar size={22} className="text-red-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold text-slate-800">
+                  {selectedMonth
+                    ? `Monatsbericht – ${MONTHS[parseInt(selectedMonth) - 1]} ${selectedYear}`
+                    : `Alle Monatsberichte – ${selectedYear}`}
+                </div>
+                <div className="text-sm text-slate-500 mt-0.5">
+                  Gesellschaft: <span className="font-semibold">{selectedCompanyName}</span>
+                </div>
+                <div className="text-xs text-red-400 mt-1 font-medium">
+                  {selectedMonth
+                    ? (monthlyData.find((m: any) => m.month === parseInt(selectedMonth)) ? '✓ Datensatz vorhanden' : '✗ Kein Datensatz')
+                    : `${monthlyData.length} Datensätze vorhanden`}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => handleDelete(
+                selectedMonth
+                  ? `Monatsbericht für ${MONTHS[parseInt(selectedMonth) - 1]} ${selectedYear} der Gesellschaft „${selectedCompanyName}" löschen?`
+                  : `Alle ${monthlyData.length} Monatsberichte des Jahres ${selectedYear} der Gesellschaft „${selectedCompanyName}" löschen?`,
+                () => doDeleteMonthly(selectedMonth ? parseInt(selectedMonth) : undefined)
+              )}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600 active:scale-95 transition-all shadow-md shadow-red-500/20"
+            >
+              <Trash2 size={16} />
+              {selectedMonth ? 'Monat löschen' : 'Ganzes Jahr löschen'}
+            </button>
+          </div>
+
+          {/* Delete initial backlog */}
+          <div className="bg-orange-50 rounded-2xl p-6 border border-orange-100">
+            <div className="flex items-start gap-3 mb-4">
+              <ClipboardCheck size={22} className="text-orange-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold text-slate-800">Auftragsbestand {selectedYear}</div>
+                <div className="text-sm text-slate-500 mt-0.5">
+                  Gesellschaft: <span className="font-semibold">{selectedCompanyName}</span>
+                </div>
+                <div className="text-xs text-orange-400 mt-1 font-medium">
+                  {hasInitial ? `✓ Wert: ${new Intl.NumberFormat('de-DE').format(initialData[0]?.amount)} €` : '✗ Kein Auftragsbestand erfasst'}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => handleDelete(
+                `Auftragsbestand ${selectedYear} der Gesellschaft „${selectedCompanyName}" löschen?`,
+                doDeleteInitial
+              )}
+              disabled={!hasInitial}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-orange-500 text-white font-bold hover:bg-orange-600 active:scale-95 transition-all shadow-md shadow-orange-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <RefreshCw size={16} />
+              Auftragsbestand zurücksetzen
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -996,6 +1287,7 @@ export default function App() {
               <Route path="/analytics" element={<AnalyticsDashboard user={user} />} />
               <Route path="/users" element={<AdminUserManagement />} />
               <Route path="/companies" element={<AdminCompanyManagement />} />
+              <Route path="/data-management" element={<AdminDataManagement />} />
               <Route path="*" element={<Navigate to="/admin" replace />} />
             </>
           ) : (

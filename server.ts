@@ -413,6 +413,53 @@ async function startServer() {
     }
   });
 
+  // ADMIN DATA MANAGEMENT - Delete/Reset monthly data
+  app.delete('/api/admin/data/monthly', authenticateToken, (req: any, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const { company_id, year, month } = req.body;
+
+    if (!company_id || !year) {
+      return res.status(400).json({ error: 'company_id und year sind erforderlich' });
+    }
+
+    try {
+      let result;
+      if (month) {
+        // Delete specific month
+        result = db.prepare(
+          'DELETE FROM orders_monthly WHERE company_id = ? AND year = ? AND month = ?'
+        ).run(parseInt(company_id), parseInt(year), parseInt(month));
+      } else {
+        // Delete entire year for company
+        result = db.prepare(
+          'DELETE FROM orders_monthly WHERE company_id = ? AND year = ?'
+        ).run(parseInt(company_id), parseInt(year));
+      }
+      res.json({ success: true, deleted: result.changes });
+    } catch (e: any) {
+      res.status(500).json({ error: 'Fehler beim Löschen der Daten' });
+    }
+  });
+
+  // ADMIN DATA MANAGEMENT - Delete/Reset initial backlog
+  app.delete('/api/admin/data/initial', authenticateToken, (req: any, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const { company_id, year } = req.body;
+
+    if (!company_id || !year) {
+      return res.status(400).json({ error: 'company_id und year sind erforderlich' });
+    }
+
+    try {
+      const result = db.prepare(
+        'DELETE FROM orders_initial WHERE company_id = ? AND year = ?'
+      ).run(parseInt(company_id), parseInt(year));
+      res.json({ success: true, deleted: result.changes });
+    } catch (e: any) {
+      res.status(500).json({ error: 'Fehler beim Löschen des Auftragsbestands' });
+    }
+  });
+
   // DATA QUERY (for Analytics)
   app.get('/api/query', authenticateToken, (req: any, res) => {
     const { year, company_id } = req.query;
