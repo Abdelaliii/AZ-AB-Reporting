@@ -22,7 +22,7 @@ services:
     environment:
       - OAUTH2_PROXY_PROVIDER=azure
       - OAUTH2_PROXY_CLIENT_ID=d1502a42-ba8d-4546-84cc-a2eb4a2e9cfd
-      - OAUTH2_PROXY_CLIENT_SECRET=5ec3234e-cea9-4603-8844-cffbc7aac367
+      - OAUTH2_PROXY_CLIENT_SECRET=${OAUTH2_PROXY_CLIENT_SECRET}
       - OAUTH2_PROXY_AZURE_TENANT=a65e00c7-7272-47aa-b3cf-26e459361ecf
       - OAUTH2_PROXY_OIDC_ISSUER_URL=https://login.microsoftonline.com/a65e00c7-7272-47aa-b3cf-26e459361ecf/v2.0
       - OAUTH2_PROXY_UPSTREAMS=http://are-reporting:3000/
